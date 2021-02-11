@@ -1,2 +1,3 @@
-# AMOC_TP2
-Repo pour TP2 Applications  Mobiles &amp; Objets Connectés
+# AMOC_TP_Final
+
+Repo pour TP final Applications Mobiles &amp; Objets Connectés
