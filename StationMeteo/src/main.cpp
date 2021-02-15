@@ -12,14 +12,14 @@
 #define SEALEVELPRESSURE_HPA (1013.25)
 
 // WIFI
-const char *ssid = "Mimi";
-const char *password = "JeNeSuisPasDaccord!";
+const char *ssid = "Mettre ici le nom de ton résea ex:Mimi";
+const char *password = "Mette ici ton mot de passe de ton réseau Wifi ex:123456";
 
 // MQTT
-const char *mqttServer = "192.168.3.108";
+const char *mqttServer = "Mettre ici l'adresse ip de ta VM ex: 192.168.3.10";
 const int mqttPort = 1883;
 const char *mqttUser = "homeassistant";
-const char *mqttPassword = "oaBimohtaik0ceigeec0liewah7Bo4iegoos8egheHeosh4AeCee0eicepaidah4";
+const char *mqttPassword = "Mettre ici la clé de home Assistance ex:oaBimohtaik0ceigeec0liewah7Bo4iegoos8egheHeo";
 
 // OBJETS
 Adafruit_BME280 bme;
@@ -78,9 +78,9 @@ void loop()
   String string2 = String(bme.readHumidity());
   String string3 = String(bme.readPressure() / 100.0F);
 
-  client.publish("meteoStation/Temperature", string1.c_str());
-  client.publish("meteoStation/Humidite", string2.c_str());
-  client.publish("meteoStation/Pression", string3.c_str());
+  client.publish("environnementQuebec/Temperature", string1.c_str());
+  client.publish("environnementQuebec/Humidite", string2.c_str());
+  client.publish("environnementQuebec/Pression", string3.c_str());
   client.loop();
 
   // PRINT LN VALEURS
