@@ -17,10 +17,10 @@ const char *ssid = "StationMeteo";
 const char *password = "stationmeteo";
 
 // MQTT
-const char *mqttServer = "192.168.43.210";
+const char *mqttServer = "192.168.43.198";
 const int mqttPort = 1883;
 const char *mqttUser = "homeassistant";
-const char *mqttPassword = "";
+const char *mqttPassword = "ohZ0Ualoo3bae7thie4Nookase2aghaeph5ap4yei2ADae6NeewohthohFee1ohN";
 
 // OBJETS
 Adafruit_BME280 bme;
