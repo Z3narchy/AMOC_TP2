@@ -3,64 +3,88 @@
 // https://randomnerdtutorials.com/cloud-weather-station-esp32-esp8266/
 // https://randomnerdtutorials.com/installing-the-esp32-board-in-arduino-ide-windows-instructions/
 
+
+/******* INCLUSION DES BIBLIOTHÈQUES *******/
 #include <WiFiManager.h>
 #include <PubSubClient.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
 #include <DNSServer.h>
+#include <Credential.h>
 
-#define SEALEVELPRESSURE_HPA (1013.25)
 
-// WIFI
-const char *ssid = "StationMeteo";
-const char *password = "stationmeteo";
+/******* WIFI *******/
+const char *ssid = MYSSID;
+const char *password = MYPSW;
 
-// MQTT
+
+/******* SUJET_PUBLICATION *******/
+#define temperature_topic "stationMeteo/Temperature" 
+#define humidite_topic "stationMeteo/Humidite"      
+#define pression_topic "stationMeteo/Pression"  
+
+
+/******* MQTT *******/
 const char *mqttServer = "192.168.43.198";
 const int mqttPort = 1883;
 const char *mqttUser = "homeassistant";
 const char *mqttPassword = "ohZ0Ualoo3bae7thie4Nookase2aghaeph5ap4yei2ADae6NeewohthohFee1ohN";
 
-// OBJETS
+
+/******* VARIABLES *******/
+float temperature;
+float humidite;
+float pression;
+unsigned long lastTime = 0;
+unsigned long timerDelay = 3000;
+String temperatureConverti;
+String humiditeConverti;
+String pressionConverti;
+
+
+/******* OBJETS *******/
 Adafruit_BME280 bme;
 WiFiClient espClient;
 PubSubClient client(espClient);
 WiFiManager wifiManager;
 
+
+/******* MÉTHODES *******/
+void ObtenirInformationCapteur();
+void ConvertiMesureRecueilli();
+void PublierInformation();
+void AfficherMesureConsole();
+
+
 void setup()
 {
   Serial.begin(115200);
 
-  // Verifie si le BME est bien trouvé
   if (!bme.begin(0x76))
   {
-    Serial.println("Could not find a valid BME280 sensor, check wiring!");
-    while (1)
-      ;
+    Serial.println("Echec de lecture! Svp, verifiez les conncetion du capteur BME280.");
+    while (1);
   }
 
-  //Connection au réseau
-  //wifiManager.resetSettings();
   if (!wifiManager.autoConnect())
   {
-    Serial.println("Connection failed");
+    Serial.println("Connexion echouee!");
   }
 
-  // SET MQTT SERVER
   client.setServer(mqttServer, mqttPort);
 
   while (!client.connected())
   {
-    Serial.println("Connecting to MQTT...");
+    Serial.println("Connexion au serveur MQTT...");
 
     if (client.connect("ESP32Client", mqttUser, mqttPassword))
     {
-      Serial.println("connected");
+      Serial.println("Connexion reussie!");
     }
     else
     {
-      Serial.print("failed with state ");
+      Serial.print("Echec avec erreur ");
       Serial.print(client.state());
       delay(2000);
     }
@@ -69,24 +93,57 @@ void setup()
 
 void loop()
 {
-  // PUBLIE
-  String string1 = String(bme.readTemperature());
-  String string2 = String(bme.readHumidity());
-  String string3 = String(bme.readPressure() / 100.0F);
-
-  client.publish("stationMeteo/Temperature", string1.c_str());
-  client.publish("stationMeteo/Humidite", string2.c_str());
-  client.publish("stationMeteo/Pression", string3.c_str());
-  client.loop();
-
-  // PRINT LN VALEURS
-  Serial.println(bme.readTemperature());
-
-  Serial.println(bme.readPressure() / 100.0F);
-
-  Serial.println(bme.readHumidity());
-
-  Serial.println();
-
-  delay(500);
+  if ((millis() - lastTime) > timerDelay)
+  {
+    ObtenirInformationCapteur();
+    ConvertiMesureRecueilli();
+    PublierInformation();
+    AfficherMesureConsole();
+    client.loop();
+    lastTime = millis();
+  }
 }
+
+void ObtenirInformationCapteur()
+{
+  temperature = bme.readTemperature();
+  humidite = bme.readHumidity();
+  pression = bme.readPressure() / 100.0F;
+}
+
+void ConvertiMesureRecueilli()
+{
+  temperatureConverti = String(temperature);
+  humiditeConverti = String(humidite);
+  pressionConverti = String(pression);
+}
+
+void PublierInformation()
+{
+  client.publish(temperature_topic, temperatureConverti.c_str());
+  client.publish(humidite_topic, humiditeConverti.c_str());
+  client.publish(pression_topic, pressionConverti.c_str());
+}
+
+void AfficherMesureConsole()
+{
+  Serial.print("Temperature: ");
+  Serial.println(temperature);
+  Serial.print("Humidite:    ");
+  Serial.println(humidite);
+  Serial.print("Pression:    ");
+  Serial.println(pression);
+  Serial.println();
+}
+/*
+RESET = digitalRead(PIN_RESET_BUTTON);
+if( RESET == HIGH) {                                 
+      Serial.println("Erase settings and restart ...");
+      delay(1000);
+      wm.resetSettings();  
+      ESP.restart();  
+}
+
+
+
+*/
