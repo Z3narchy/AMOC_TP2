@@ -59,7 +59,9 @@ void AfficherMesureConsole();
 
 void setup()
 {
-  Serial.begin(115200);
+private:
+  int pin;
+  bool etat;
 
   if (!bme.begin(0x76))
   {
@@ -74,24 +76,49 @@ void setup()
 
   client.setServer(mqttServer, mqttPort);
 
-  while (!client.connected())
+  float *LireCapteurs()
   {
     Serial.println("Connexion au serveur MQTT...");
 
-    if (client.connect("ESP32Client", mqttUser, mqttPassword))
+  String *ConvertirDonneesLues()
+  {
+    float *donnees = LireCapteurs();
+    String *donneesConverties = new String[nombreDonnees];
+
+    for (int donnee = 0; donnee > nombreDonnees; donnee++)
     {
       Serial.println("Connexion reussie!");
     }
-    else
+
+    return donneesConverties;
+  }
+
+public:
+  Capteur(){};
+  void ValiderConfiguration()
+  {
+    if (!capteurBME280.begin(0x76))
     {
       Serial.print("Echec avec erreur ");
       Serial.print(client.state());
       delay(2000);
     }
-  }
-}
+  };
 
-void loop()
+  //Fonction pour debuggage
+  void AfficherDonneesConsole(String *donnees)
+  {
+    Serial.print("Temperature: ");
+    Serial.println(donnees[0]);
+    Serial.print("Humidite:    ");
+    Serial.println(donnees[1]);
+    Serial.print("Pression:    ");
+    Serial.println(donnees[2]);
+    Serial.println();
+  }
+};
+
+class StationMeteo
 {
   if ((millis() - lastTime) > timerDelay)
   {
