@@ -3,7 +3,7 @@
 class Bouton
 {
 private:
-    int etat = 0;
+    int etat = 1;
     int pin;
 
 public:
@@ -19,6 +19,7 @@ public:
     void ChangerEtat()
     {
         int etatCourant = LireEtat();
+
         if (this->etat != etatCourant)
         {
             this->etat = etatCourant;
@@ -75,8 +76,8 @@ public:
     }
 };
 
-Bouton reset(0);
-Bouton activate(1);
+Bouton reset(6);
+Bouton activate(5);
 
 LED ouvertes(3);
 LED fermes(4);
@@ -84,47 +85,60 @@ LED actives(2);
 
 unsigned long delaisPrecedent = 0;
 unsigned long dureeClignotement = 5000;
+int estFermetureCompleteee = 0;
+int estOuvertureComplete = 0;
 
 void setup()
 {
-    ;
+    Serial.begin(9600);
 }
 
 void loop()
 {
+    if (!fermes.getEtat() && !ouvertes.getEtat())
+    {
+        fermes.Allumer();
+    }
+
     activate.ChangerEtat();
 
-    if (activate.getEtat())
+    if (!activate.getEtat())
     {
-
-        if (ouvertes.getEtat())
+        if (ouvertes.getEtat() && !estFermetureCompleteee)
         {
-
+            estFermetureCompleteee = 0;
+            Serial.println(delaisPrecedent);
             if ((millis() - delaisPrecedent) < dureeClignotement)
             {
                 actives.Clignoter();
             }
-            else if ((millis() - delaisPrecedent) > dureeClignotement)
+            else
             {
+                Serial.println("closing: got there");
                 actives.Eteindre();
                 ouvertes.Eteindre();
                 fermes.Allumer();
+                estFermetureCompleteee = 1;
+                estOuvertureComplete = 0;
             }
-            delaisPrecedent = millis();
         }
-        else if (fermes.getEtat())
+
+        else if (fermes.getEtat() && !estOuvertureComplete)
         {
             if ((millis() - delaisPrecedent) < dureeClignotement)
             {
                 actives.Clignoter();
             }
-            else if ((millis() - delaisPrecedent) > dureeClignotement)
+            else
             {
+                Serial.println("opening: got there");
                 actives.Eteindre();
                 fermes.Eteindre();
                 ouvertes.Allumer();
+                estFermetureCompleteee = 0;
+                estOuvertureComplete = 1;
             }
-            delaisPrecedent = millis();
         }
     }
+    delaisPrecedent = millis();
 }

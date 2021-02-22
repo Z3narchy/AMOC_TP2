@@ -63,25 +63,6 @@ public:
         pinMode(pin, OUTPUT);
     }
 
-    void Clignoter()
-    {
-        unsigned long delaisCourant = 0;
-        int delaisClignotement = 500;
-
-        if ((millis() - delaisCourant) >= delaisClignotement)
-        {
-            if (this->etat)
-            {
-                Eteindre();
-            }
-            else
-            {
-                Allumer();
-            }
-            delaisCourant = millis();
-        }
-    }
-
     void Allumer()
     {
         digitalWrite(this->pin, HIGH);
@@ -133,46 +114,52 @@ private:
     const int nombreFenetres = 5;
     Fenetre fenetres[5] = {Fenetre(1), Fenetre(2), Fenetre(3), Fenetre(4), Fenetre(5)};
 
-    Bouton activationManuelle = Bouton(1013);
-    Bouton renitialisationConnexion = Bouton(1012);
-    LED temoinActivation = LED(1014);
-    LED temoinFenetresOuvertes = LED(1027);
-    LED temoinFenetresFermees = LED(1016);
+    Bouton activationManuelle = Bouton(25);
+    Bouton renitialisationConnexion = Bouton(26);
+    LED temoinActivation = LED(17);
+    LED temoinFenetresOuvertes = LED(13);
+    LED temoinFenetresFermees = LED(14);
 
-    const unsigned long tempsClignotement = 5000;
+    const unsigned long tempsClignotement = 2000;
     unsigned long delaisPrecedent = 0;
+    int estOuvertureCompletee = 0;
+    int estFermetureCompeletee = 0;
 
 public:
     GestionnaireDeFenetres() {}
     void Executer()
     {
-        temoinFenetresFermees.Allumer();
-        temoinFenetresOuvertes.Allumer();
-        temoinActivation.Allumer();
+        this->IntialiserFenetres();
+        activationManuelle.ChangerEtat();
 
-        if (!activationManuelle.getEtat())
+        if (activationManuelle.getEtat())
         {
-            if (temoinFenetresOuvertes.getEtat())
+            Serial.println(activationManuelle.getEtat());
+            if (temoinFenetresOuvertes.getEtat() && !estFermetureCompeletee)
             {
                 this->FermerFenetres();
             }
-            else if (!temoinFenetresOuvertes.getEtat())
+            else if (temoinFenetresFermees.getEtat() && !estOuvertureCompletee)
             {
                 this->OuvrirFenetres();
             }
-
-            activationManuelle.ChangerEtat();
         }
     }
 
-    // !!! NE PAS OUBLIER DE GERER LE CLIGNOTEMENT !!!
+    void IntialiserFenetres()
+    {
+        if (!temoinFenetresFermees.getEtat() && !temoinFenetresOuvertes.getEtat())
+        {
+            temoinFenetresFermees.Allumer();
+            estFermetureCompeletee = 1;
+        }
+    }
+
     void OuvrirFenetres()
     {
-        Serial.println("Ouverture des fenetres...");
         if ((millis() - delaisPrecedent) < tempsClignotement)
         {
-            temoinActivation.Clignoter();
-            delaisPrecedent = millis();
+            temoinActivation.Allumer();
         }
         else
         {
@@ -181,74 +168,36 @@ public:
                 fenetres[fenetre].Ouvrir();
             }
 
+            temoinActivation.Eteindre();
             temoinFenetresFermees.Eteindre();
             temoinFenetresOuvertes.Allumer();
+            estOuvertureCompletee = 1;
+            estFermetureCompeletee = 0;
         }
+        delaisPrecedent = millis();
     };
 
     void FermerFenetres()
     {
-        Serial.println("Fermeture des fenetres...");
         if ((millis() - delaisPrecedent) < tempsClignotement)
         {
-            temoinActivation.Clignoter();
-            delaisPrecedent = millis();
+            temoinActivation.Allumer();
         }
-        else
+        else if ((millis() - delaisPrecedent) > tempsClignotement)
         {
             for (int fenetre = 0; fenetre < nombreFenetres; fenetre++)
             {
                 fenetres[fenetre].Fermer();
-                temoinFenetresFermees.Allumer();
-                temoinFenetresOuvertes.Eteindre();
             }
+
+            temoinActivation.Eteindre();
+            temoinFenetresFermees.Allumer();
+            temoinFenetresOuvertes.Eteindre();
+            estFermetureCompeletee = 1;
+            estOuvertureCompletee = 0;
         }
+        delaisPrecedent = millis();
     };
-};
-
-class Capteur
-{
-private:
-    Adafruit_BME280 capteurBME280;
-
-    float *LireCapteurs()
-    {
-        float *donneesLues = new float[3];
-        donneesLues[0] = capteurBME280.readTemperature();
-        donneesLues[1] = capteurBME280.readHumidity();
-        donneesLues[2] = capteurBME280.readPressure() / 100.0F;
-        return donneesLues;
-    };
-
-    String *ConvertirDonneesLues()
-    {
-        float *donnees = LireCapteurs();
-        String *donneesConverties = new String[nombreDonnees];
-
-        for (int donnee = 0; donnee > nombreDonnees; donnee++)
-        {
-            donneesConverties[donnee] = String(donnees[donnee]);
-        }
-
-        return donneesConverties;
-    }
-
-public:
-    Capteur(){};
-    void ValiderConfiguration()
-    {
-        if (!capteurBME280.begin(0x76))
-        {
-            Serial.println("Could not find a valid BME280 sensor, check wiring!");
-            while (1)
-                ;
-        }
-    }
-
-    String *EnvoyerDonnees()
-    {
-        return ConvertirDonneesLues();
-    }
 };
 
 class ClientCourtierDeMessages
@@ -262,14 +211,11 @@ public:
     {
         this->client = PubSubClient(espClient);
     };
-    void PublierDonnees(String *donnees)
+    void PublierDonnees(String temperature, String humidite, String pression)
     {
-        // client.publish("stationMeteo/Temperature", donnees[0].c_str());
-        // client.publish("stationMeteo/Humidite", donnees[1].c_str());
-        // client.publish("stationMeteo/Pression", donnees[2].c_str());
-        client.publish("stationMeteo/Temperature", String("Le BME280").c_str());
-        client.publish("stationMeteo/Humidite", String("est mort.").c_str());
-        client.publish("stationMeteo/Pression", String("2020-2021 - R.I.P").c_str());
+        client.publish("stationMeteo/Temperature", temperature.c_str());
+        client.publish("stationMeteo/Humidite", humidite.c_str());
+        client.publish("stationMeteo/Pression", pression.c_str());
         client.loop();
     };
 
@@ -297,14 +243,14 @@ public:
     };
 
     //Fonction pour debuggage
-    void AfficherDonneesConsole(String *donnees)
+    void AfficherDonneesConsole(String temperature, String humidite, String pression)
     {
         Serial.print("Temperature: ");
-        Serial.println(donnees[0]);
+        Serial.println(temperature);
         Serial.print("Humidite:    ");
-        Serial.println(donnees[1]);
+        Serial.println(humidite);
         Serial.print("Pression:    ");
-        Serial.println(donnees[2]);
+        Serial.println(pression);
         Serial.println();
     }
 };
@@ -312,7 +258,7 @@ public:
 class StationMeteo
 {
 private:
-    Capteur bme280;
+    Adafruit_BME280 bme280;
     GestionnaireDeFenetres gestionnaireFenetres;
     WiFiManager gestionnaireConnexion;
     ClientCourtierDeMessages clientCourtier;
@@ -320,13 +266,18 @@ private:
 public:
     StationMeteo(){};
     bool estConfigure = false;
-    unsigned long delaisPrecedent = 0;
+    unsigned long delaisPrecedentStation = 0;
     unsigned long delaisExecution = 3000;
     unsigned long delaisClignotant = 10000;
 
     void Executer()
     {
-        bme280.ValiderConfiguration();
+        if (!bme280.begin(0x76))
+        {
+            Serial.println("Echec de lecture! Svp, verifiez les connections du capteur BME280.");
+            while (1)
+                ;
+        }
         gestionnaireFenetres.Executer();
 
         if (!estConfigure)
@@ -340,12 +291,18 @@ public:
             estConfigure = true;
         }
 
-        if ((millis() - delaisPrecedent) > delaisExecution)
+        if ((millis() - delaisPrecedentStation) > delaisExecution)
         {
-            String *donneesAPublier = bme280.EnvoyerDonnees();
-            clientCourtier.PublierDonnees(donneesAPublier);
-            clientCourtier.AfficherDonneesConsole(donneesAPublier);
-            delaisPrecedent = millis();
+
+            clientCourtier.PublierDonnees(
+                String(bme280.readTemperature()),
+                String(bme280.readHumidity()),
+                String(bme280.readPressure() / 100.0f));
+            clientCourtier.AfficherDonneesConsole(
+                String(bme280.readTemperature()),
+                String(bme280.readHumidity()),
+                String(bme280.readPressure() / 100.0f));
+            delaisPrecedentStation = millis();
         }
     }
 };
@@ -360,4 +317,7 @@ void setup()
 void loop()
 {
     station.Executer();
+    // digitalWrite(13, HIGH);
+    // digitalWrite(14, HIGH);
+    // digitalWrite(17, HIGH);
 }
