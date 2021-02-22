@@ -116,9 +116,9 @@ private:
 
     Bouton activationManuelle = Bouton(25);
     Bouton renitialisationConnexion = Bouton(26);
-    LED temoinActivation = LED(17);
-    LED temoinFenetresOuvertes = LED(13);
-    LED temoinFenetresFermees = LED(14);
+    LED temoinActivation = LED(27);
+    LED temoinFenetresOuvertes = LED(17);
+    LED temoinFenetresFermees = LED(16);
 
     const unsigned long tempsClignotement = 2000;
     unsigned long delaisPrecedent = 0;
