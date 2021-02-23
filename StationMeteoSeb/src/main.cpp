@@ -119,7 +119,7 @@ public:
 
     void Configurer()
     {
-        gestionnaireWifi.setConfigPortalTimeout(120);
+        gestionnaireWifi.setConfigPortalTimeout(90);
 
         if (!gestionnaireWifi.autoConnect(SSIDPortail, MDPPortail))
         {
@@ -150,6 +150,7 @@ private:
     Fenetre fenetres[5] = {Fenetre(1), Fenetre(2), Fenetre(3), Fenetre(4), Fenetre(5)};
 
     Bouton activationManuelle = Bouton(25);
+    //Ajouter objet gestion fenetres auto.
     LED temoinActivation = LED(17);
     LED temoinFenetresOuvertes = LED(27);
     LED temoinFenetresFermees = LED(16);
@@ -158,12 +159,21 @@ private:
     unsigned long tempsDebutOperation;
     int estOperationCompletee;
     int estOperationEnCours;
+    int estGestionAutomatique = 1;
 
 public:
     PanneauDeControle() {}
+
+    //*****-----Gerer veille et economie d'energie-----*****
+
     void Executer()
     {
         this->IntialiserTemoinsFenetres();
+
+        if (estGestionAutomatique)
+        {
+            //Ajouter methodes utilisé pour verifier données et agir sur les fenetres automatiquement
+        }
 
         if (!estOperationEnCours)
         {
@@ -327,9 +337,10 @@ class StationMeteo
 {
 private:
     Adafruit_BME280 bme280;
-    PanneauDeControle gestionnaireFenetres;
+    PanneauDeControle panneauControle;
     GestionnaireDeWifi gestionnaireConnexion;
     ClientCourtierDeMessages clientCourtier;
+
     int estConfigure = 0;
     unsigned long delaisPrecedentStation = 0;
     const unsigned long delaisExecution = 3000;
@@ -345,7 +356,7 @@ public:
         }
 
         //gestionnaireConnexion.ActiverPortail();
-        gestionnaireFenetres.Executer();
+        panneauControle.Executer();
 
         if ((millis() - delaisPrecedentStation) > delaisExecution)
         {
