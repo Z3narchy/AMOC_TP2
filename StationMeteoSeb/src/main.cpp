@@ -10,6 +10,7 @@
 #include <Adafruit_BME280.h>
 #include <DNSServer.h>
 #include <Arduino.h>
+#include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
 #include "CredentialsCourtierDeMessages.h"
 #include "CredentialsWiFiManager.h"
@@ -113,6 +114,8 @@ private:
     WiFiManager gestionnaireWifi;
     Bouton demarragePortail = Bouton(26);
     int estPortailDemarre = 0;
+    const char *nombreFenetre = "";
+    int nombreFenetreConverti = 0;
 
 public:
     GestionnaireDeWifi(){};
@@ -125,7 +128,8 @@ public:
         {
             Serial.println("Échec de la connection");
         }
-        gestionnaireWifi.setWiFiAutoReconnect(1);
+
+        AjouterParametreConfiguration();
     }
 
     void ActiverPortail()
@@ -135,6 +139,29 @@ public:
         {
             gestionnaireWifi.startConfigPortal(SSIDPortail, MDPPortail);
         }
+    }
+
+    void AjouterParametreConfiguration()
+    {
+        gestionnaireWifi.setWiFiAutoReconnect(1);
+        WiFiManagerParameter custom_mqtt_server(" server ", " mqtt server ", mqttServer, 40);
+        gestionnaireWifi.addParameter(&custom_mqtt_server);
+        mqttServer = custom_mqtt_server.getValue();
+        gestionnaireWifi.setWiFiAutoReconnect(1);
+        WiFiManagerParameter custom_mqtt_User(" server ", " mqtt user ", mqttUser, 25);
+        gestionnaireWifi.addParameter(&custom_mqtt_User);
+        mqttUser = custom_mqtt_User.getValue();
+        gestionnaireWifi.setWiFiAutoReconnect(1);
+        WiFiManagerParameter custom_mqtt_Password(" server ", " mqtt port ", mqttPassword, 65);
+        gestionnaireWifi.addParameter(&custom_mqtt_Password);
+        mqttPassword = custom_mqtt_Password.getValue();
+        gestionnaireWifi.setWiFiAutoReconnect(1);
+        /*
+        WiFiManagerParameter custom_nombre_Fenetre(" maison ", " maison nb fenêtre ", nombreFenetre, 25);
+        gestionnaireWifi.addParameter(&custom_nombre_Fenetre);
+        nombreFenetre = custom_nombre_Fenetre.getValue();
+        nombreFenetreConverti = nombreFenetre.toInt();
+        */
     }
 };
 
