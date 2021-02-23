@@ -25,7 +25,7 @@ public:
     Bouton(int p_pin)
     {
         this->pin = p_pin;
-        pinMode(pin, INPUT);
+        pinMode(pin, INPUT_PULLUP);
         etat = 1;
     }
 
@@ -116,30 +116,33 @@ private:
 
     Bouton activationManuelle = Bouton(25);
     Bouton renitialisationConnexion = Bouton(26);
-    LED temoinActivation = LED(27);
-    LED temoinFenetresOuvertes = LED(17);
+    LED temoinActivation = LED(17);
+    LED temoinFenetresOuvertes = LED(27);
     LED temoinFenetresFermees = LED(16);
 
-    const unsigned long tempsClignotement = 2000;
-    unsigned long delaisPrecedent = 0;
-    int estOuvertureCompletee = 0;
-    int estFermetureCompeletee = 0;
+    const unsigned long tempsActivation = 5000;
+    unsigned long tempsDebutOperation;
+    int estOperationCompletee = 0;
+    int estOperationEnCours = 0;
 
 public:
     GestionnaireDeFenetres() {}
     void Executer()
     {
         this->IntialiserFenetres();
-        activationManuelle.ChangerEtat();
 
-        if (activationManuelle.getEtat())
+        if (!estOperationEnCours)
         {
-            Serial.println(activationManuelle.getEtat());
-            if (temoinFenetresOuvertes.getEtat() && !estFermetureCompeletee)
+            activationManuelle.ChangerEtat();
+        }
+
+        if (!activationManuelle.getEtat() || !estOperationCompletee)
+        {
+            if (temoinFenetresOuvertes.getEtat())
             {
                 this->FermerFenetres();
             }
-            else if (temoinFenetresFermees.getEtat() && !estOuvertureCompletee)
+            else if (temoinFenetresFermees.getEtat())
             {
                 this->OuvrirFenetres();
             }
@@ -151,53 +154,77 @@ public:
         if (!temoinFenetresFermees.getEtat() && !temoinFenetresOuvertes.getEtat())
         {
             temoinFenetresFermees.Allumer();
-            estFermetureCompeletee = 1;
+            estOperationCompletee = 1; //******
         }
     }
 
     void OuvrirFenetres()
     {
-        if ((millis() - delaisPrecedent) < tempsClignotement)
+        if (!estOperationEnCours)
         {
-            temoinActivation.Allumer();
+            this->DemarrerOperations();
         }
-        else
+
+        if ((millis() - tempsDebutOperation) > tempsActivation)
         {
             for (int fenetre = 0; fenetre < nombreFenetres; fenetre++)
             {
                 fenetres[fenetre].Ouvrir();
             }
 
-            temoinActivation.Eteindre();
-            temoinFenetresFermees.Eteindre();
-            temoinFenetresOuvertes.Allumer();
-            estOuvertureCompletee = 1;
-            estFermetureCompeletee = 0;
+            this->CompleterOuverture();
         }
-        delaisPrecedent = millis();
     };
+
+    void CompleterOuverture()
+    {
+        temoinFenetresOuvertes.Allumer();
+        temoinActivation.Eteindre();
+        temoinFenetresFermees.Eteindre();
+        estOperationCompletee = 1;
+        estOperationEnCours = 0;
+    }
 
     void FermerFenetres()
     {
-        if ((millis() - delaisPrecedent) < tempsClignotement)
+
+        if (!estOperationEnCours)
         {
-            temoinActivation.Allumer();
+            this->DemarrerOperations();
         }
-        else if ((millis() - delaisPrecedent) > tempsClignotement)
+
+        else if ((millis() - tempsDebutOperation) > tempsActivation)
         {
             for (int fenetre = 0; fenetre < nombreFenetres; fenetre++)
             {
                 fenetres[fenetre].Fermer();
             }
 
-            temoinActivation.Eteindre();
-            temoinFenetresFermees.Allumer();
-            temoinFenetresOuvertes.Eteindre();
-            estFermetureCompeletee = 1;
-            estOuvertureCompletee = 0;
+            this->CompleterFermeture();
         }
-        delaisPrecedent = millis();
     };
+
+    void DemarrerOperations()
+    {
+        estOperationCompletee = 0;
+        tempsDebutOperation = millis();
+        estOperationEnCours = 1;
+        temoinActivation.Allumer();
+    }
+
+    void CompleterFermeture()
+    {
+        this->GererTemoinsApresFermeture();
+        estOperationCompletee = 1;
+        estOperationEnCours = 0;
+    }
+
+    void GererTemoinsApresFermeture()
+    {
+        temoinActivation.Eteindre();
+        temoinFenetresFermees.Allumer();
+        temoinFenetresOuvertes.Eteindre();
+    }
 };
 
 class ClientCourtierDeMessages
@@ -298,10 +325,12 @@ public:
                 String(bme280.readTemperature()),
                 String(bme280.readHumidity()),
                 String(bme280.readPressure() / 100.0f));
-            clientCourtier.AfficherDonneesConsole(
-                String(bme280.readTemperature()),
-                String(bme280.readHumidity()),
-                String(bme280.readPressure() / 100.0f));
+
+            // clientCourtier.AfficherDonneesConsole(
+            //     String(bme280.readTemperature()),
+            //     String(bme280.readHumidity()),
+            //     String(bme280.readPressure() / 100.0f));
+
             delaisPrecedentStation = millis();
         }
     }
@@ -317,7 +346,4 @@ void setup()
 void loop()
 {
     station.Executer();
-    // digitalWrite(13, HIGH);
-    // digitalWrite(14, HIGH);
-    // digitalWrite(17, HIGH);
 }
