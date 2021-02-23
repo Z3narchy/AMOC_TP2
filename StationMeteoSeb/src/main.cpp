@@ -12,6 +12,7 @@
 #include <Arduino.h>
 
 #include "CredentialsCourtierDeMessages.h"
+#include "CredentialsWiFiManager.h"
 
 #define nombreDonnees 3
 
@@ -25,8 +26,8 @@ public:
     Bouton(int p_pin)
     {
         this->pin = p_pin;
-        pinMode(pin, INPUT_PULLUP);
-        etat = 1;
+        pinMode(p_pin, INPUT_PULLUP);
+        this->etat = 1;
     }
 
     void ChangerEtat()
@@ -34,13 +35,13 @@ public:
         int etatLu = LireEtat();
         if (etat != etatLu)
         {
-            etat = etatLu;
+            this->etat = etatLu;
         }
     }
 
     int LireEtat()
     {
-        int etatLu = digitalRead(pin);
+        int etatLu = digitalRead(this->pin);
         return etatLu;
     }
 
@@ -106,30 +107,63 @@ public:
     }
 };
 
-class GestionnaireDeFenetres
+class GestionnaireDeWifi
 {
 private:
-    //Nombre fenetres fixe utilisé pour démonstration, on devrait normalement prendre un tableau de fenêtres
+    WiFiManager gestionnaireWifi;
+    Bouton demarragePortail = Bouton(26);
+    int estPortailDemarre = 0;
+
+public:
+    GestionnaireDeWifi(){};
+
+    void Configurer()
+    {
+        gestionnaireWifi.setConfigPortalTimeout(120);
+
+        if (!gestionnaireWifi.autoConnect(SSIDPortail, MDPPortail))
+        {
+            Serial.println("Échec de la connection");
+        }
+        gestionnaireWifi.setWiFiAutoReconnect(1);
+    }
+
+    void ActiverPortail()
+    {
+        demarragePortail.ChangerEtat();
+        if (!demarragePortail.getEtat())
+        {
+            gestionnaireWifi.startConfigPortal(SSIDPortail, MDPPortail);
+        }
+    }
+};
+
+class PanneauDeControle
+{
+private:
+    //Nombre fenetres fixe utilisé à des fins de démonstration, on devrait normalement prendre un tableau de fenêtres
     //en paramêtre dans le constructeur et l'attribuer à la variable.
+    //Cette classe contient trop de varibales et de méthodes, elle devrait être redécoupée, si vous pouvez lire
+    //ce commentaire c'est que nous n'avons pas eu le temps de le faire.
+
     const int nombreFenetres = 5;
     Fenetre fenetres[5] = {Fenetre(1), Fenetre(2), Fenetre(3), Fenetre(4), Fenetre(5)};
 
     Bouton activationManuelle = Bouton(25);
-    Bouton renitialisationConnexion = Bouton(26);
     LED temoinActivation = LED(17);
     LED temoinFenetresOuvertes = LED(27);
     LED temoinFenetresFermees = LED(16);
 
-    const unsigned long tempsActivation = 5000;
+    const unsigned long tempsActivation = 10000;
     unsigned long tempsDebutOperation;
-    int estOperationCompletee = 0;
-    int estOperationEnCours = 0;
+    int estOperationCompletee;
+    int estOperationEnCours;
 
 public:
-    GestionnaireDeFenetres() {}
+    PanneauDeControle() {}
     void Executer()
     {
-        this->IntialiserFenetres();
+        this->IntialiserTemoinsFenetres();
 
         if (!estOperationEnCours)
         {
@@ -149,12 +183,12 @@ public:
         }
     }
 
-    void IntialiserFenetres()
+    void IntialiserTemoinsFenetres()
     {
         if (!temoinFenetresFermees.getEtat() && !temoinFenetresOuvertes.getEtat())
         {
             temoinFenetresFermees.Allumer();
-            estOperationCompletee = 1; //******
+            estOperationCompletee = 1;
         }
     }
 
@@ -176,30 +210,18 @@ public:
         }
     };
 
-    void CompleterOuverture()
-    {
-        temoinFenetresOuvertes.Allumer();
-        temoinActivation.Eteindre();
-        temoinFenetresFermees.Eteindre();
-        estOperationCompletee = 1;
-        estOperationEnCours = 0;
-    }
-
     void FermerFenetres()
     {
-
         if (!estOperationEnCours)
         {
             this->DemarrerOperations();
         }
-
         else if ((millis() - tempsDebutOperation) > tempsActivation)
         {
             for (int fenetre = 0; fenetre < nombreFenetres; fenetre++)
             {
                 fenetres[fenetre].Fermer();
             }
-
             this->CompleterFermeture();
         }
     };
@@ -212,9 +234,20 @@ public:
         temoinActivation.Allumer();
     }
 
+    void CompleterOuverture()
+    {
+        this->GererTemoinsApresOuverture();
+        CompleterOperations();
+    }
+
     void CompleterFermeture()
     {
-        this->GererTemoinsApresFermeture();
+        GererTemoinsApresFermeture();
+        CompleterOperations();
+    }
+
+    void CompleterOperations()
+    {
         estOperationCompletee = 1;
         estOperationEnCours = 0;
     }
@@ -225,6 +258,13 @@ public:
         temoinFenetresFermees.Allumer();
         temoinFenetresOuvertes.Eteindre();
     }
+
+    void GererTemoinsApresOuverture()
+    {
+        temoinFenetresOuvertes.Allumer();
+        temoinActivation.Eteindre();
+        temoinFenetresFermees.Eteindre();
+    };
 };
 
 class ClientCourtierDeMessages
@@ -238,6 +278,7 @@ public:
     {
         this->client = PubSubClient(espClient);
     };
+
     void PublierDonnees(String temperature, String humidite, String pression)
     {
         client.publish("stationMeteo/Temperature", temperature.c_str());
@@ -286,37 +327,25 @@ class StationMeteo
 {
 private:
     Adafruit_BME280 bme280;
-    GestionnaireDeFenetres gestionnaireFenetres;
-    WiFiManager gestionnaireConnexion;
+    PanneauDeControle gestionnaireFenetres;
+    GestionnaireDeWifi gestionnaireConnexion;
     ClientCourtierDeMessages clientCourtier;
+    int estConfigure = 0;
+    unsigned long delaisPrecedentStation = 0;
+    const unsigned long delaisExecution = 3000;
 
 public:
     StationMeteo(){};
-    bool estConfigure = false;
-    unsigned long delaisPrecedentStation = 0;
-    unsigned long delaisExecution = 3000;
-    unsigned long delaisClignotant = 10000;
 
     void Executer()
     {
-        if (!bme280.begin(0x76))
-        {
-            Serial.println("Echec de lecture! Svp, verifiez les connections du capteur BME280.");
-            while (1)
-                ;
-        }
-        gestionnaireFenetres.Executer();
-
         if (!estConfigure)
         {
-            if (!gestionnaireConnexion.autoConnect())
-            {
-                Serial.println("Échec de la connection");
-            }
-
-            clientCourtier.Configurer();
-            estConfigure = true;
+            Configurer();
         }
+
+        //gestionnaireConnexion.ActiverPortail();
+        gestionnaireFenetres.Executer();
 
         if ((millis() - delaisPrecedentStation) > delaisExecution)
         {
@@ -333,6 +362,19 @@ public:
 
             delaisPrecedentStation = millis();
         }
+    }
+
+    void Configurer()
+    {
+        if (!bme280.begin(0x76))
+        {
+            Serial.println("Echec de lecture! Svp, verifiez les connections du capteur BME280.");
+            while (1)
+                ;
+        }
+        gestionnaireConnexion.Configurer();
+        clientCourtier.Configurer();
+        estConfigure = 1;
     }
 };
 
