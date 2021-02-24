@@ -7,10 +7,6 @@
 
 // Version 1
 
-etatFenetre = getEtatFenetre
-estActiverManuellement = false;
-
-
 
 if(etatFenetre)  // fenêtre ouvert
 {

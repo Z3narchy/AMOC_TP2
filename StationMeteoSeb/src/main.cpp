@@ -133,6 +133,7 @@ public:
 
     void ActiverPortail()
     {
+        AjouterParametreConfiguration();
         demarragePortail.ChangerEtat();
         if (!demarragePortail.getEtat())
         {
@@ -301,6 +302,56 @@ public:
         temoinActivation.Eteindre();
         temoinFenetresFermees.Eteindre();
     };
+};
+
+class GestionAutoFenetre
+{
+private:
+    int etatFenetre = 0;
+    bool estActiverManuellement = false;
+    PanneauDeControle panneauDeControle;
+    Adafruit_BME280 bme280;
+    float temperature;
+    float humidite;
+    float pression;
+
+public:
+    GestionAutoFenetre(){};
+    void Executer()
+    {
+        //etatFenetre = getEtatFenetre();
+
+        if (!estActiverManuellement) // gestion automatique, btnManuelle non activer
+        {
+            LectureCapteur();
+
+            if (etatFenetre) // fenêtre ouverte
+            {
+                if (temperature > 26 || humidite > 50 || pression < 1000)
+                {
+                    panneauDeControle.FermerFenetres();
+                }
+            }
+            else
+            {
+                if ((temperature < 26 && temperature > 18) && humidite < 50 && pression > 1000)
+                {
+                    panneauDeControle.OuvrirFenetres();
+                }
+            }
+        }
+    }
+    void LectureCapteur()
+    {
+        temperature = bme280.readTemperature();
+        humidite = bme280.readHumidity();
+        pression = (bme280.readPressure() / 100.0f);
+    }
+
+    void InverserEtatEstActiverManuellement()
+    {
+        estActiverManuellement = !estActiverManuellement;
+    }
 };
 
 class ClientCourtierDeMessages
