@@ -10,7 +10,7 @@
 #include <Adafruit_BME280.h>
 #include <DNSServer.h>
 #include <Arduino.h>
-#include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
+#include <ArduinoJson.h> //https://github.com/bblanchon/ArduinoJson
 
 #include "CredentialsCourtierDeMessages.h"
 #include "CredentialsWiFiManager.h"
@@ -123,13 +123,12 @@ public:
     void Configurer()
     {
         gestionnaireWifi.setConfigPortalTimeout(90);
+        AjouterParametreConfiguration();
 
         if (!gestionnaireWifi.autoConnect(SSIDPortail, MDPPortail))
         {
             Serial.println("Échec de la connection");
         }
-
-        AjouterParametreConfiguration();
     }
 
     void ActiverPortail()
