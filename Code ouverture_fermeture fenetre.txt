@@ -7,10 +7,6 @@ bool
 
 Version 1
 
-etatFenetre = getEtatFenetre
-estActiverManuellement = false;
-
-
 
 if(etatFenetre)  // fenêtre ouvert
 {
@@ -35,6 +31,32 @@ else (!etatFenetre) // fenêtre fermé
 			{
 				ouvertureFenetre();
 			}
+		}
+	}
+}
+
+
+
+estActiverManuellement = false;
+
+
+
+etatFenetre = getEtatFenetre
+
+if(!estActiverManuellement)  // gestion automatique, btnManuelle non activer
+{
+	if(etatFenetre)  // fenêtre ouverte
+	{
+		if(temperature > 26 || humidite > 50 || pression < 1000)   
+		{
+			fermetureFenetre();
+		}
+	}
+	else
+	{
+		if(temperature < 26 && humidite < 50 && pression > 1000)   
+		{
+			ouvertureFenetre();
 		}
 	}
 }
