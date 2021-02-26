@@ -407,7 +407,7 @@ public:
         }
     };
 
-    bool ActiverPortail()
+    bool getEstPortailDemande()
     {
         return controles.getEstPortailDemande();
     }
@@ -532,12 +532,11 @@ public:
         gestionnaireWifi.addParameter(&custom_nombre_fenetres);
     }
 
-    void ActiverPortail(bool estDemarrageDemande)
+    bool ActiverPortail()
     {
-        if (estDemarrageDemande)
+        if (!gestionnaireWifi.startConfigPortal(SSIDPortail, MDPPortail))
         {
-            estSerialise = 0;
-            gestionnaireWifi.startConfigPortal(SSIDPortail, MDPPortail);
+            gestionnaireWifi.autoConnect();
         }
     }
 
@@ -608,7 +607,11 @@ public:
             Configurer();
         }
 
-        gestionnaireConnexion.ActiverPortail(panneauControle.ActiverPortail());
+        if (panneauControle.getEstPortailDemande())
+        {
+            gestionnaireConnexion.ActiverPortail();
+            clientCourtier.Configurer();
+        }
 
         evaluateurMeteo.Executer();
 
@@ -616,8 +619,8 @@ public:
 
         if ((millis() - delaisPrecedentStation) > delaisExecution)
         {
-            //Devaient initialement être reçues via un Array mais cela faisait paniquer 
-            //le processeur donc nous avons opté pour 3 accesseurs. 
+            //Devaient initialement être reçues via un Array mais cela faisait paniquer
+            //le processeur donc nous avons opté pour 3 accesseurs.
 
             float temperature = evaluateurMeteo.getTemperature();
             float humidite = evaluateurMeteo.getHumidite();
