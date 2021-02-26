@@ -6,6 +6,8 @@
 #include <DNSServer.h>
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <esp_bt_main.h>
+#include <SPIFFS.h>
 
 #include "CredentialsCourtierDeMessages.h"
 #include "CredentialsWiFiManager.h"
@@ -322,9 +324,10 @@ private:
     int nombreDeFenetres;
 
 public:
-    PanneauDeControle()
+    PanneauDeControle(){};
+    PanneauDeControle(char **configuration)
     {
-        this->nombreDeFenetres = atoi(nombreFenetres);
+        this->nombreDeFenetres = atoi(configuration[4]);
     };
 
     void Executer(bool estMeteoAcceptable)
@@ -433,8 +436,8 @@ public:
 
     void InitialiserFenetres()
     {
-        this->fenetres = new Fenetre[nombreDeFenetres];
-        for (int indiceFenetre = 0; indiceFenetre < nombreDeFenetres; indiceFenetre++)
+        this->fenetres = new Fenetre[atoi(nombreFenetres)];
+        for (int indiceFenetre = 0; indiceFenetre < atoi(nombreFenetres); indiceFenetre++)
         {
             this->fenetres[indiceFenetre] = Fenetre(indiceFenetre);
         };
@@ -461,7 +464,7 @@ public:
         client.loop();
     };
 
-    void Configurer()
+    void Configurer(/* passer config*/)
     {
         client.setServer(mqttServer, atoi(mqttPort));
 
@@ -494,17 +497,18 @@ private:
     WiFiManagerParameter custom_mqtt_Port;
     WiFiManagerParameter custom_mqtt_Password;
     WiFiManagerParameter custom_nombre_fenetres;
-    DynamicJsonDocument parametres;
-    bool estSerialise = 0;
+    WiFiManagerParameter custom_nom_fileDeMessages;
+    static bool estConfigSauvegardee;
+    char **configuration;
 
 public:
     GestionnaireDeWifi()
-        : custom_mqtt_server("mqttServer", "Serveur MQTT", mqttServer, 40),
-          custom_mqtt_User("mqttUser", "Utilisateur MQTT", mqttUser, 25),
-          custom_mqtt_Port("mqttPort", "Port Serveur MQTT", mqttPort, 5),
+        : custom_mqtt_server("mqttServer", "IP Serveur MQTT", "", 40),
+          custom_mqtt_User("mqttUser", "Utilisateur MQTT", "stationMeteo", 25),
+          custom_mqtt_Port("mqttPort", "Port Serveur MQTT", "1883", 5),
           custom_mqtt_Password("mqttPassword", "Mot de passe MQTT", "", 65),
           custom_nombre_fenetres("nombreFenetres", "Nombre de fenêtres", 0, 2),
-          parametres(200)
+          custom_nom_fileDeMessages("mqttNomFile", "Nom de la file de messages", "", 60)
     {
     }
 
@@ -513,77 +517,92 @@ public:
         AjouterParametresConfiguration();
         gestionnaireWifi.setConfigPortalTimeout(90);
         gestionnaireWifi.setWiFiAutoReconnect(1);
+        gestionnaireWifi.setSaveConfigCallback(ModifierEstConfigSauvegardee);
 
         if (!gestionnaireWifi.autoConnect(SSIDPortail, MDPPortail))
         {
             Serial.println("Échec de la connection");
-            estSerialise = 0;
         }
+        SauvegarderConfiguration();
+    }
 
-        SauvegarderParametres();
+    static void ModifierEstConfigSauvegardee()
+    {
+        estConfigSauvegardee = 1;
     }
 
     void AjouterParametresConfiguration()
     {
         gestionnaireWifi.addParameter(&custom_mqtt_server);
-        gestionnaireWifi.addParameter(&custom_mqtt_User);
         gestionnaireWifi.addParameter(&custom_mqtt_Port);
+        gestionnaireWifi.addParameter(&custom_mqtt_User);
         gestionnaireWifi.addParameter(&custom_mqtt_Password);
         gestionnaireWifi.addParameter(&custom_nombre_fenetres);
+        gestionnaireWifi.addParameter(&custom_nom_fileDeMessages);
     }
 
-    bool ActiverPortail()
+    void ActiverPortail()
     {
         if (!gestionnaireWifi.startConfigPortal(SSIDPortail, MDPPortail))
         {
+            Serial.println("Échec de la connexion. Reconnexion avec l'ancienne configuration...");
             gestionnaireWifi.autoConnect();
         }
     }
 
-    void SauvegarderParametres()
+    void SauvegarderConfiguration()
     {
-        if (!estSerialise)
-        {
-            String mqttServer = custom_mqtt_server.getValue();
-            String mqttUser = custom_mqtt_User.getValue();
-            String mqttPort = custom_mqtt_Port.getValue();
-            String mqttPassword = custom_mqtt_Password.getValue();
-            String nombreFenetres = custom_nombre_fenetres.getValue();
+        DynamicJsonDocument bufferJson(2048);
+        File cfg = SPIFFS.open("/config.json", FILE_WRITE);
 
-            parametres["serveurMQTT"] = mqttServer;
-            parametres["utilisateurMQTT"] = mqttUser;
-            parametres["portMQTT"] = mqttPort;
-            parametres["motDePasseMQTT"] = mqttPassword;
-            parametres["nombreDeFenetres"] = nombreFenetres;
+        String mqttServer = custom_mqtt_server.getValue();
+        String mqttPort = custom_mqtt_Port.getValue();
+        String mqttUser = custom_mqtt_User.getValue();
+        String mqttPassword = custom_mqtt_Password.getValue();
+        String nombreFenetres = custom_nombre_fenetres.getValue();
+        String nomFileDeMessages = custom_nom_fileDeMessages.getValue();
 
-            serializeJsonPretty(parametres, Serial);
-            Serial.println("");
-        }
-        estSerialise = 1;
+        bufferJson["serveurMQTT"] = mqttServer;
+        bufferJson["portMQTT"] = mqttPort;
+        bufferJson["utilisateurMQTT"] = mqttUser;
+        bufferJson["motDePasseMQTT"] = mqttPassword;
+        bufferJson["nombreDeFenetres"] = nombreFenetres;
+        bufferJson["nomFileDeMessagesMQTT"] = nomFileDeMessages;
+
+        serializeJson(bufferJson, cfg);
+        cfg.close();
+        bufferJson.clear();
     }
 
-    void RecupererParametres()
+    void RecupererConfiguration()
     {
-        char json[] = "{\"serveur\":\"serveurMQTT\",\"utilisateur\":\"utilisateurMQTT\", \"port\":\"portMQTT\", \"motDePasse\":\"motDePasseMQTT\", \"nombreFenetres\":\"nombreDeFenetres\"}";
-
-        DynamicJsonDocument parametres(200);
-        DeserializationError erreur = deserializeJson(parametres, json);
+        DynamicJsonDocument bufferJson(2048);
+        File cfg = SPIFFS.open("/config.json", FILE_READ);
+        auto erreur = deserializeJson(bufferJson, cfg);
 
         if (erreur)
         {
-            Serial.println("Deserialization failed: ");
+            Serial.println("Deserialisation échouée: ");
             Serial.println(erreur.f_str());
         }
 
-        const char *serveur = parametres["serveur"];
-        const char *utilisateur = parametres["utilisateur"];
-        const char *port = parametres["port"];
-        const char *motDePasse = parametres["motDePasse"];
-        const char *nombreFenetres = parametres["nombreFenetres"];
+        const char *serveur = bufferJson["serveurMQTT"];
+        const char *port = bufferJson["portMQTT"];
+        const char *utilisateur = bufferJson["utilisateurMQTT"];
+        const char *motDePasse = bufferJson["motDePasseMQTT"];
+        const char *nombreFenetres = bufferJson["nombreDeFenetres"];
+        const char *nomFileMessage = bufferJson["nomFileDeMessagesMQTT"];
 
-        //Reste a pousser dans config esp.
+        memcpy(this->configuration[0], serveur, sizeof(&serveur));
+        memcpy(this->configuration[1], port, sizeof(&port));
+        memcpy(this->configuration[2], utilisateur, sizeof(&utilisateur));
+        memcpy(this->configuration[3], motDePasse, sizeof(&motDePasse));
+        memcpy(this->configuration[4], nombreFenetres, sizeof(&nombreFenetres));
+        memcpy(this->configuration[5], nomFileMessage, sizeof(&nomFileMessage));
     }
 };
+
+bool GestionnaireDeWifi::estConfigSauvegardee = false;
 
 class StationMeteo
 {
@@ -593,6 +612,7 @@ private:
     GestionnaireDeWifi gestionnaireConnexion;
     ClientCourtierDeMessages clientCourtier;
 
+    char **configuration;
     bool estConfiguree = 0;
     unsigned long delaisPrecedentStation = 0;
     const unsigned long delaisExecution = 3000;
@@ -610,11 +630,11 @@ public:
         if (panneauControle.getEstPortailDemande())
         {
             gestionnaireConnexion.ActiverPortail();
+            gestionnaireConnexion.SauvegarderConfiguration();
             clientCourtier.Configurer();
         }
 
         evaluateurMeteo.Executer();
-
         panneauControle.Executer(evaluateurMeteo.getEstMeteoAcceptable());
 
         if ((millis() - delaisPrecedentStation) > delaisExecution)
@@ -650,6 +670,11 @@ StationMeteo station;
 void setup()
 {
     Serial.begin(115200);
+    esp_bluedroid_disable();
+    if (!SPIFFS.begin())
+    {
+        Serial.println("Echec au demarrage de SPIFFS");
+    };
 }
 
 void loop()
