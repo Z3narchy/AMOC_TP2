@@ -1,8 +1,3 @@
-// https://randomnerdtutorials.com/esp32-web-server-with-bme280-mini-weather-station/
-// https://randomnerdtutorials.com/esp32-mqtt-publish-bme280-arduino/
-// https://randomnerdtutorials.com/cloud-weather-station-esp32-esp8266/
-// https://randomnerdtutorials.com/installing-the-esp32-board-in-arduino-ide-windows-instructions/
-
 #include <WiFiManager.h>
 #include <PubSubClient.h>
 #include <Wire.h>
@@ -10,45 +5,26 @@
 #include <Adafruit_BME280.h>
 #include <DNSServer.h>
 #include <Arduino.h>
-#include <ArduinoJson.h> //https://github.com/bblanchon/ArduinoJson
+#include <ArduinoJson.h>
 
 #include "CredentialsCourtierDeMessages.h"
 #include "CredentialsWiFiManager.h"
-
-#define nombreDonnees 3
 
 class Bouton
 {
 private:
     int pin;
-    int etat;
 
 public:
     Bouton(int p_pin)
     {
         this->pin = p_pin;
         pinMode(p_pin, INPUT_PULLUP);
-        this->etat = 1;
     }
 
-    void ChangerEtat()
+    bool LireEtat()
     {
-        int etatLu = LireEtat();
-        if (etat != etatLu)
-        {
-            this->etat = etatLu;
-        }
-    }
-
-    int LireEtat()
-    {
-        int etatLu = digitalRead(this->pin);
-        return etatLu;
-    }
-
-    int getEtat()
-    {
-        return this->etat;
+        return digitalRead(this->pin);
     }
 };
 
@@ -56,7 +32,7 @@ class LED
 {
 private:
     int pin;
-    int etat;
+    bool etat;
 
 public:
     LED(int p_pin)
@@ -87,213 +63,43 @@ class Fenetre
 {
 private:
     unsigned int numeroFenetre;
-    bool estOuverte;
+    bool estOuverte = 0;
 
 public:
     Fenetre(){};
     Fenetre(unsigned int p_numeroFenetre)
     {
         this->numeroFenetre = p_numeroFenetre;
-        this->estOuverte = false;
+        this->estOuverte = 0;
     }
 
     void Ouvrir()
     {
-        this->estOuverte = true;
+        this->estOuverte = 1;
     }
 
     void Fermer()
     {
-        this->estOuverte = false;
+        this->estOuverte = 0;
     }
 };
 
-class GestionnaireDeWifi
+class TemoinsLumineux
 {
 private:
-    WiFiManager gestionnaireWifi;
-    Bouton demarragePortail = Bouton(26);
-    int estPortailDemarre = 0;
-    const char *nombreFenetre = "";
-    int nombreFenetreConverti = 0;
-
-public:
-    GestionnaireDeWifi(){};
-
-    void Configurer()
-    {
-        gestionnaireWifi.setConfigPortalTimeout(90);
-        AjouterParametreConfiguration();
-
-        if (!gestionnaireWifi.autoConnect(SSIDPortail, MDPPortail))
-        {
-            Serial.println("Échec de la connection");
-        }
-    }
-
-    void ActiverPortail()
-    {
-        AjouterParametreConfiguration();
-        demarragePortail.ChangerEtat();
-        if (!demarragePortail.getEtat())
-        {
-            gestionnaireWifi.startConfigPortal(SSIDPortail, MDPPortail);
-        }
-    }
-
-    void AjouterParametreConfiguration()
-    {
-        gestionnaireWifi.setWiFiAutoReconnect(1);
-        WiFiManagerParameter custom_mqtt_server(" server ", " mqtt server ", mqttServer, 40);
-        gestionnaireWifi.addParameter(&custom_mqtt_server);
-        mqttServer = custom_mqtt_server.getValue();
-        gestionnaireWifi.setWiFiAutoReconnect(1);
-        WiFiManagerParameter custom_mqtt_User(" server ", " mqtt user ", mqttUser, 25);
-        gestionnaireWifi.addParameter(&custom_mqtt_User);
-        mqttUser = custom_mqtt_User.getValue();
-        gestionnaireWifi.setWiFiAutoReconnect(1);
-        WiFiManagerParameter custom_mqtt_Password(" server ", " mqtt port ", mqttPassword, 65);
-        gestionnaireWifi.addParameter(&custom_mqtt_Password);
-        mqttPassword = custom_mqtt_Password.getValue();
-        gestionnaireWifi.setWiFiAutoReconnect(1);
-        /*
-        WiFiManagerParameter custom_nombre_Fenetre(" maison ", " maison nb fenêtre ", nombreFenetre, 25);
-        gestionnaireWifi.addParameter(&custom_nombre_Fenetre);
-        nombreFenetre = custom_nombre_Fenetre.getValue();
-        nombreFenetreConverti = nombreFenetre.toInt();
-        */
-    }
-};
-
-class PanneauDeControle
-{
-private:
-    //Nombre fenetres fixe utilisé à des fins de démonstration, on devrait normalement prendre un tableau de fenêtres
-    //en paramêtre dans le constructeur et l'attribuer à la variable.
-    //Cette classe contient trop de varibales et de méthodes, elle devrait être redécoupée, si vous pouvez lire
-    //ce commentaire c'est que nous n'avons pas eu le temps de le faire.
-
-    const int nombreFenetres = 5;
-    Fenetre fenetres[5] = {Fenetre(1), Fenetre(2), Fenetre(3), Fenetre(4), Fenetre(5)};
-
-    Bouton activationManuelle = Bouton(25);
-    //Ajouter objet gestion fenetres auto.
     LED temoinActivation = LED(17);
     LED temoinFenetresOuvertes = LED(27);
     LED temoinFenetresFermees = LED(16);
-
-    const unsigned long tempsActivation = 10000;
-    unsigned long tempsDebutOperation;
-    int estOperationCompletee;
-    int estOperationEnCours;
-    int estGestionAutomatique = 1;
+    bool sontInitialises = 0;
 
 public:
-    PanneauDeControle() {}
-
-    //*****-----Gerer veille et economie d'energie-----*****
-
-    void Executer()
-    {
-        this->IntialiserTemoinsFenetres();
-
-        if (estGestionAutomatique)
-        {
-            //Ajouter methodes utilisé pour verifier données et agir sur les fenetres automatiquement
-        }
-
-        if (!estOperationEnCours)
-        {
-            activationManuelle.ChangerEtat();
-        }
-
-        if (!activationManuelle.getEtat() || !estOperationCompletee)
-        {
-            if (temoinFenetresOuvertes.getEtat())
-            {
-                this->FermerFenetres();
-            }
-            else if (temoinFenetresFermees.getEtat())
-            {
-                this->OuvrirFenetres();
-            }
-        }
-    }
-
-    void IntialiserTemoinsFenetres()
-    {
-        if (!temoinFenetresFermees.getEtat() && !temoinFenetresOuvertes.getEtat())
-        {
-            temoinFenetresFermees.Allumer();
-            estOperationCompletee = 1;
-        }
-    }
-
-    void OuvrirFenetres()
-    {
-        if (!estOperationEnCours)
-        {
-            this->DemarrerOperations();
-        }
-
-        if ((millis() - tempsDebutOperation) > tempsActivation)
-        {
-            for (int fenetre = 0; fenetre < nombreFenetres; fenetre++)
-            {
-                fenetres[fenetre].Ouvrir();
-            }
-
-            this->CompleterOuverture();
-        }
-    };
-
-    void FermerFenetres()
-    {
-        if (!estOperationEnCours)
-        {
-            this->DemarrerOperations();
-        }
-        else if ((millis() - tempsDebutOperation) > tempsActivation)
-        {
-            for (int fenetre = 0; fenetre < nombreFenetres; fenetre++)
-            {
-                fenetres[fenetre].Fermer();
-            }
-            this->CompleterFermeture();
-        }
-    };
-
-    void DemarrerOperations()
-    {
-        estOperationCompletee = 0;
-        tempsDebutOperation = millis();
-        estOperationEnCours = 1;
-        temoinActivation.Allumer();
-    }
-
-    void CompleterOuverture()
-    {
-        this->GererTemoinsApresOuverture();
-        CompleterOperations();
-    }
-
-    void CompleterFermeture()
-    {
-        GererTemoinsApresFermeture();
-        CompleterOperations();
-    }
-
-    void CompleterOperations()
-    {
-        estOperationCompletee = 1;
-        estOperationEnCours = 0;
-    }
+    TemoinsLumineux(){};
 
     void GererTemoinsApresFermeture()
     {
         temoinActivation.Eteindre();
-        temoinFenetresFermees.Allumer();
         temoinFenetresOuvertes.Eteindre();
+        temoinFenetresFermees.Allumer();
     }
 
     void GererTemoinsApresOuverture()
@@ -302,55 +108,336 @@ public:
         temoinActivation.Eteindre();
         temoinFenetresFermees.Eteindre();
     };
+
+    void AllumerTemoinActivation()
+    {
+        temoinActivation.Allumer();
+    }
+
+    void InitialiserTemoins()
+    {
+        if (!sontInitialises)
+        {
+            temoinFenetresFermees.Allumer();
+            sontInitialises = 1;
+        }
+    }
 };
 
-class GestionAutoFenetre
+class ControlesDuPanneau
 {
 private:
-    int etatFenetre = 0;
-    bool estActiverManuellement = false;
-    PanneauDeControle panneauDeControle;
+    Bouton activationManuelle = Bouton(25);
+    Bouton activationAutomatique = Bouton(26);
+    Bouton activationPortail = Bouton(13);
+    bool estActivationManuelle;
+    bool estActivationAutomatique;
+    bool estPortailDemande;
+
+    void LireEtatBoutons()
+    {
+        estActivationManuelle = !activationManuelle.LireEtat();
+        estPortailDemande = !activationPortail.LireEtat();
+        if (!estActivationAutomatique)
+        {
+            estActivationAutomatique = !activationAutomatique.LireEtat();
+        }
+    }
+
+public:
+    ControlesDuPanneau()
+    {
+        estActivationManuelle = 0;
+        estActivationAutomatique = 1;
+        estPortailDemande = 0;
+    };
+
+    bool getEstActivationAutomatique()
+    {
+        return estActivationAutomatique;
+    }
+
+    bool getEstPortailDemande()
+    {
+        return estPortailDemande;
+    }
+
+    bool getEstActivationManuelle()
+    {
+        return estActivationManuelle;
+    }
+
+    void SelectionnerTypeOperation()
+    {
+        LireEtatBoutons();
+        if (estActivationManuelle)
+        {
+            this->estActivationAutomatique = 0;
+        }
+    }
+};
+
+class EvaluateurConditionsMeteo
+{
+private:
     Adafruit_BME280 bme280;
+    bool estMeteoAcceptable;
     float temperature;
     float humidite;
     float pression;
 
+    void EvaluerConditionsMeteo()
+    {
+        this->estMeteoAcceptable = EvaluerTemperature() &&
+                                   EvaluerHumidite() &&
+                                   EvaluerPression();
+    }
+
+    bool EvaluerTemperature()
+    {
+        return this->temperature > 18 && this->temperature < 26;
+    }
+
+    bool EvaluerHumidite()
+    {
+        return this->humidite < 50;
+    }
+
+    bool EvaluerPression()
+    {
+        return this->pression > 1010;
+    }
+
+    void LireBme280()
+    {
+        this->temperature = bme280.readTemperature();
+        this->humidite = bme280.readHumidity();
+        this->pression = bme280.readPressure();
+    }
+
 public:
-    GestionAutoFenetre(){};
+    EvaluateurConditionsMeteo(){};
+
     void Executer()
     {
-        //etatFenetre = getEtatFenetre();
+        LireBme280();
+        EvaluerConditionsMeteo();
+    }
 
-        if (!estActiverManuellement) // gestion automatique, btnManuelle non activer
+    float getTemperature()
+    {
+        return temperature;
+    }
+
+    float getHumidite()
+    {
+        return humidite;
+    }
+
+    float getPression()
+    {
+        return pression;
+    }
+
+    bool getEstMeteoAcceptable()
+    {
+        return estMeteoAcceptable;
+    }
+
+    void ConfigurerCapteur()
+    {
+        if (!bme280.begin(0x76))
         {
-            LectureCapteur();
-
-            if (etatFenetre) // fenêtre ouverte
-            {
-                if (temperature > 26 || humidite > 50 || pression < 1000)
-                {
-                    panneauDeControle.FermerFenetres();
-                }
-            }
-            else
-            {
-                if ((temperature < 26 && temperature > 18) && humidite < 50 && pression > 1000)
-                {
-                    panneauDeControle.OuvrirFenetres();
-                }
-            }
+            Serial.println("Echec de lecture! Svp, verifiez les connections du capteur BME280.");
+            while (1)
+                ;
         }
     }
-    void LectureCapteur()
+};
+
+class EtatsPanneauDeControle
+{
+private:
+    bool sontFenetresOuvertes;
+    bool estOperationCompletee;
+    bool estOperationEnCours;
+
+public:
+    EtatsPanneauDeControle()
     {
-        temperature = bme280.readTemperature();
-        humidite = bme280.readHumidity();
-        pression = (bme280.readPressure() / 100.0f);
+        this->sontFenetresOuvertes = 0;
+        this->estOperationCompletee = 1;
+        this->estOperationEnCours = 0;
+    };
+
+    void InverserEtatFenetres()
+    {
+        this->sontFenetresOuvertes = !sontFenetresOuvertes;
     }
 
-    void InverserEtatEstActiverManuellement()
+    void CommencerOperation()
     {
-        estActiverManuellement = !estActiverManuellement;
+        this->estOperationCompletee = 0;
+        this->estOperationEnCours = 1;
+    }
+
+    void TerminerOperation()
+    {
+        InverserEtatFenetres();
+        this->estOperationCompletee = 1;
+        this->estOperationEnCours = 0;
+    }
+
+    bool getSontFenetresOuvertes()
+    {
+        return sontFenetresOuvertes;
+    }
+
+    bool getEstOperationsEnCours()
+    {
+        return estOperationEnCours;
+    }
+
+    bool getEstOperationCompletee()
+    {
+        return estOperationCompletee;
+    }
+};
+
+class PanneauDeControle
+{
+    //Nous savons que cette classe n'est pas optimale et si vous pouvez lire ce commentaire
+    //c'est que nous avons manqué de temps pour la paufiner.
+
+    //Corriger loop entre activation auto et manuelle
+private:
+    Fenetre *fenetres;
+    TemoinsLumineux temoins;
+    EtatsPanneauDeControle etats;
+    ControlesDuPanneau controles;
+    const unsigned long tempsActivationFenetres = 10000;
+    unsigned long tempsDebutOperation;
+    int nombreDeFenetres;
+
+public:
+    PanneauDeControle()
+    {
+        this->nombreDeFenetres = atoi(nombreFenetres);
+    };
+
+    void Executer(bool estMeteoAcceptable)
+    {
+        temoins.InitialiserTemoins();
+
+        if (!etats.getEstOperationsEnCours())
+        {
+            controles.SelectionnerTypeOperation();
+        }
+
+        if (controles.getEstActivationAutomatique())
+        {
+            ExecuterOperationsAutomatiques(estMeteoAcceptable);
+        }
+        else if (controles.getEstActivationManuelle())
+        {
+            ExecuterOperationsManuelles();
+        }
+    }
+
+    void ExecuterOperationsAutomatiques(bool estMeteoAcceptable)
+    {
+        bool sontFenetresOuvertes = etats.getSontFenetresOuvertes();
+
+        if (estMeteoAcceptable && !sontFenetresOuvertes)
+        {
+            OuvrirFenetres();
+        }
+        if (!estMeteoAcceptable && sontFenetresOuvertes)
+        {
+            FermerFenetres();
+        }
+    }
+
+    void ExecuterOperationsManuelles()
+    {
+        bool sontFenetresOuvertes = etats.getSontFenetresOuvertes();
+
+        if (sontFenetresOuvertes)
+        {
+            FermerFenetres();
+        }
+        else if (!sontFenetresOuvertes)
+        {
+            OuvrirFenetres();
+        }
+    }
+
+    void OuvrirFenetres()
+    {
+        if (!etats.getEstOperationsEnCours())
+        {
+            DemarrerOperations();
+        }
+        else if ((millis() - this->tempsDebutOperation) > this->tempsActivationFenetres)
+        {
+            Serial.println((millis() - this->tempsDebutOperation));
+
+            for (int indice = 0; indice < nombreDeFenetres; indice++)
+            {
+                this->fenetres[indice].Ouvrir();
+            }
+            CompleterOuverture();
+        }
+    };
+
+    void FermerFenetres()
+    {
+        if (!etats.getEstOperationsEnCours())
+        {
+            DemarrerOperations();
+        }
+        else if ((millis() - tempsDebutOperation) > tempsActivationFenetres)
+        {
+            for (int indice = 0; indice < nombreDeFenetres; indice++)
+            {
+                fenetres[indice].Fermer();
+            }
+
+            CompleterFermeture();
+        }
+    };
+
+    bool ActiverPortail()
+    {
+        return controles.getEstPortailDemande();
+    }
+
+    void DemarrerOperations()
+    {
+        this->tempsDebutOperation = millis();
+        this->etats.CommencerOperation();
+        this->temoins.AllumerTemoinActivation();
+    }
+
+    void CompleterOuverture()
+    {
+        this->temoins.GererTemoinsApresOuverture();
+        this->etats.TerminerOperation();
+    }
+
+    void CompleterFermeture()
+    {
+        this->temoins.GererTemoinsApresFermeture();
+        this->etats.TerminerOperation();
+    }
+
+    void InitialiserFenetres()
+    {
+        this->fenetres = new Fenetre[nombreDeFenetres];
+        for (int indiceFenetre = 0; indiceFenetre < nombreDeFenetres; indiceFenetre++)
+        {
+            this->fenetres[indiceFenetre] = Fenetre(indiceFenetre);
+        };
     }
 };
 
@@ -374,9 +461,21 @@ public:
         client.loop();
     };
 
+    //Fonction pour debuggage
+    void AfficherDonneesConsole(String temperature, String humidite, String pression)
+    {
+        Serial.print("Temperature:");
+        Serial.println(temperature);
+        Serial.print("Humidite:");
+        Serial.println(humidite);
+        Serial.print("Pression:");
+        Serial.println(pression);
+        Serial.println();
+    }
+
     void Configurer()
     {
-        client.setServer(mqttServer, mqttPort);
+        client.setServer(mqttServer, atoi(mqttPort));
 
         while (!client.connected())
         {
@@ -396,29 +495,119 @@ public:
             delay(2000);
         }
     };
+};
 
-    //Fonction pour debuggage
-    void AfficherDonneesConsole(String temperature, String humidite, String pression)
+class GestionnaireDeWifi
+{
+private:
+    WiFiManager gestionnaireWifi;
+    WiFiManagerParameter custom_mqtt_server;
+    WiFiManagerParameter custom_mqtt_User;
+    WiFiManagerParameter custom_mqtt_Port;
+    WiFiManagerParameter custom_mqtt_Password;
+    WiFiManagerParameter custom_nombre_fenetres;
+    DynamicJsonDocument parametres;
+    bool estSerialise = 0;
+
+public:
+    GestionnaireDeWifi()
+        : custom_mqtt_server("mqttServer", "Serveur MQTT", mqttServer, 40),
+          custom_mqtt_User("mqttUser", "Utilisateur MQTT", mqttUser, 25),
+          custom_mqtt_Port("mqttPort", "Port Serveur MQTT", mqttPort, 5),
+          custom_mqtt_Password("mqttPassword", "Mot de passe MQTT", "", 65),
+          custom_nombre_fenetres("nombreFenetres", "Nombre de fenêtres", 0, 2),
+          parametres(200)
     {
-        Serial.print("Temperature: ");
-        Serial.println(temperature);
-        Serial.print("Humidite:    ");
-        Serial.println(humidite);
-        Serial.print("Pression:    ");
-        Serial.println(pression);
-        Serial.println();
+    }
+
+    void Configurer()
+    {
+        AjouterParametresConfiguration();
+        gestionnaireWifi.setConfigPortalTimeout(90);
+        gestionnaireWifi.setWiFiAutoReconnect(1);
+
+        if (!gestionnaireWifi.autoConnect(SSIDPortail, MDPPortail))
+        {
+            Serial.println("Échec de la connection");
+            estSerialise = 0;
+        }
+
+        SauvegarderParametres();
+    }
+
+    void AjouterParametresConfiguration()
+    {
+        gestionnaireWifi.addParameter(&custom_mqtt_server);
+        gestionnaireWifi.addParameter(&custom_mqtt_User);
+        gestionnaireWifi.addParameter(&custom_mqtt_Port);
+        gestionnaireWifi.addParameter(&custom_mqtt_Password);
+        gestionnaireWifi.addParameter(&custom_nombre_fenetres);
+    }
+
+    //-----Revoir gestion activation du portail sur demande-----
+    void ActiverPortail(bool estDemarrageDemande)
+    {
+        if (estDemarrageDemande)
+        {
+            estSerialise = 0;
+            gestionnaireWifi.startConfigPortal(SSIDPortail, MDPPortail);
+        }
+    }
+
+    void SauvegarderParametres()
+    {
+        if (!estSerialise)
+        {
+            String mqttServer = custom_mqtt_server.getValue();
+            String mqttUser = custom_mqtt_User.getValue();
+            String mqttPort = custom_mqtt_Port.getValue();
+            String mqttPassword = custom_mqtt_Password.getValue();
+            String nombreFenetres = custom_nombre_fenetres.getValue();
+
+            parametres["serveurMQTT"] = mqttServer;
+            parametres["utilisateurMQTT"] = mqttUser;
+            parametres["portMQTT"] = mqttPort;
+            parametres["motDePasseMQTT"] = mqttPassword;
+            parametres["nombreDeFenetres"] = nombreFenetres;
+
+            serializeJsonPretty(parametres, Serial);
+            Serial.println("");
+        }
+        estSerialise = 1;
+    }
+
+    void RecupererParametres()
+    {
+        char json[] = "{\"serveur\":\"serveurMQTT\",\"utilisateur\":\"utilisateurMQTT\", \"port\":\"portMQTT\", \"motDePasse\":\"motDePasseMQTT\", \"nombreFenetres\":\"nombreDeFenetres\"}";
+
+        DynamicJsonDocument parametres(200);
+        DeserializationError erreur = deserializeJson(parametres, json);
+
+        if (erreur)
+        {
+            Serial.println("Deserialization failed: ");
+            Serial.println(erreur.f_str());
+        }
+
+        const char *serveur = parametres["serveur"];
+        const char *utilisateur = parametres["utilisateur"];
+        const char *port = parametres["port"];
+        const char *motDePasse = parametres["motDePasse"];
+        const char *nombreFenetres = parametres["nombreFenetres"];
+
+        //Reste a pousser dans config esp.
     }
 };
 
 class StationMeteo
 {
 private:
-    Adafruit_BME280 bme280;
+    EvaluateurConditionsMeteo evaluateurMeteo;
     PanneauDeControle panneauControle;
     GestionnaireDeWifi gestionnaireConnexion;
     ClientCourtierDeMessages clientCourtier;
 
-    int estConfigure = 0;
+    bool estConfiguree = 0;
     unsigned long delaisPrecedentStation = 0;
     const unsigned long delaisExecution = 3000;
 
@@ -427,42 +616,39 @@ public:
 
     void Executer()
     {
-        if (!estConfigure)
+        if (!estConfiguree)
         {
             Configurer();
         }
 
-        //gestionnaireConnexion.ActiverPortail();
-        panneauControle.Executer();
+        gestionnaireConnexion.ActiverPortail(panneauControle.ActiverPortail());
+
+        evaluateurMeteo.Executer();
+
+        panneauControle.Executer(evaluateurMeteo.getEstMeteoAcceptable());
 
         if ((millis() - delaisPrecedentStation) > delaisExecution)
         {
+            float temperature = evaluateurMeteo.getTemperature();
+            float humidite = evaluateurMeteo.getHumidite();
+            float pression = evaluateurMeteo.getPression();
 
             clientCourtier.PublierDonnees(
-                String(bme280.readTemperature()),
-                String(bme280.readHumidity()),
-                String(bme280.readPressure() / 100.0f));
+                String(temperature),
+                String(humidite),
+                String(pression / 100.0f));
 
-            // clientCourtier.AfficherDonneesConsole(
-            //     String(bme280.readTemperature()),
-            //     String(bme280.readHumidity()),
-            //     String(bme280.readPressure() / 100.0f));
-
-            delaisPrecedentStation = millis();
+            this->delaisPrecedentStation = millis();
         }
     }
 
     void Configurer()
     {
-        if (!bme280.begin(0x76))
-        {
-            Serial.println("Echec de lecture! Svp, verifiez les connections du capteur BME280.");
-            while (1)
-                ;
-        }
+        panneauControle.InitialiserFenetres();
+        evaluateurMeteo.ConfigurerCapteur();
         gestionnaireConnexion.Configurer();
         clientCourtier.Configurer();
-        estConfigure = 1;
+        this->estConfiguree = 1;
     }
 };
 
