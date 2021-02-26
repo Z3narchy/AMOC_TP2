@@ -61,6 +61,8 @@ public:
 
 class Fenetre
 {
+    //Nous sommes conscient que la gestion des fenêtres demanderait beaucoup plus de manipulations que ce qui est contenu dans cette classe,
+    //mais afin de simplifier l'exercice qui demandait de simuler le processus nous nous sommes limités au code ci-dessous.
 private:
     unsigned int numeroFenetre;
     bool estOuverte = 0;
@@ -136,6 +138,8 @@ private:
 
     void LireEtatBoutons()
     {
+        //Utilisation des états inverses car boutons en mode INPUT_PULLUP.
+
         estActivationManuelle = !activationManuelle.LireEtat();
         estPortailDemande = !activationPortail.LireEtat();
         if (!estActivationAutomatique)
@@ -308,8 +312,6 @@ class PanneauDeControle
 {
     //Nous savons que cette classe n'est pas optimale et si vous pouvez lire ce commentaire
     //c'est que nous avons manqué de temps pour la paufiner.
-
-    //Corriger loop entre activation auto et manuelle
 private:
     Fenetre *fenetres;
     TemoinsLumineux temoins;
@@ -380,8 +382,6 @@ public:
         }
         else if ((millis() - this->tempsDebutOperation) > this->tempsActivationFenetres)
         {
-            Serial.println((millis() - this->tempsDebutOperation));
-
             for (int indice = 0; indice < nombreDeFenetres; indice++)
             {
                 this->fenetres[indice].Ouvrir();
@@ -461,18 +461,6 @@ public:
         client.loop();
     };
 
-    //Fonction pour debuggage
-    void AfficherDonneesConsole(String temperature, String humidite, String pression)
-    {
-        Serial.print("Temperature:");
-        Serial.println(temperature);
-        Serial.print("Humidite:");
-        Serial.println(humidite);
-        Serial.print("Pression:");
-        Serial.println(pression);
-        Serial.println();
-    }
-
     void Configurer()
     {
         client.setServer(mqttServer, atoi(mqttPort));
@@ -544,7 +532,6 @@ public:
         gestionnaireWifi.addParameter(&custom_nombre_fenetres);
     }
 
-    //-----Revoir gestion activation du portail sur demande-----
     void ActiverPortail(bool estDemarrageDemande)
     {
         if (estDemarrageDemande)
@@ -629,6 +616,9 @@ public:
 
         if ((millis() - delaisPrecedentStation) > delaisExecution)
         {
+            //Devaient initialement être reçues via un Array mais cela faisait paniquer 
+            //le processeur donc nous avons opté pour 3 accesseurs. 
+
             float temperature = evaluateurMeteo.getTemperature();
             float humidite = evaluateurMeteo.getHumidite();
             float pression = evaluateurMeteo.getPression();
