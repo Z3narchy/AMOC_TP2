@@ -471,10 +471,6 @@ private:
     //     strcpy(buffer, nomFileDeMessageMqtt);
     //     strcat(buffer, "/Pression");
     //     strcpy(this->nomfilePression, buffer);
-
-    //     Serial.println(nomfileTemperature);
-    //     Serial.println(nomfileHumidite);
-    //     Serial.println(nomfilePression);
     // }
 
 public:
@@ -495,7 +491,7 @@ public:
     {
         client.setServer(serveurMqtt, portMqtt);
         //strcpy(this->nomFileDeMessageMqtt, nomFileMqtt);
-        //ConfigurerNomsFilesDeMessages();à
+        //ConfigurerNomsFilesDeMessages();
 
         int tentatives = 0;
         while (!client.connected() && tentatives < 5)
@@ -503,12 +499,7 @@ public:
 
             Serial.println("Connection à MQTT...");
 
-            Serial.println(serveurMqtt);
-            Serial.println(portMqtt);
-            Serial.println(nomUtilisateurMqtt);
-            Serial.println(motDePasseMqtt);
-
-            if (client.connect("esp32Client", nomUtilisateurMqtt, motDePasseMqtt))
+            if (client.connect("espClient", nomUtilisateurMqtt, motDePasseMqtt))
             {
                 Serial.println("Connecté");
             }
@@ -517,11 +508,6 @@ public:
                 Serial.print("La connexion a échoué avec le code: ");
                 Serial.print(client.state());
                 Serial.println("");
-
-                Serial.println(serveurMqtt);
-                Serial.println(portMqtt);
-                Serial.println(nomUtilisateurMqtt);
-                Serial.println(motDePasseMqtt);
             }
 
             tentatives++;
@@ -753,7 +739,6 @@ public:
         float humidite = evaluateurMeteo.getHumidite();
         float pression = evaluateurMeteo.getPression();
 
-        Serial.println("Publication des données");
         clientCourtier.PublierDonnees(
             String(temperature),
             String(humidite),
