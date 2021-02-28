@@ -8,8 +8,8 @@
 #include <ArduinoJson.h>
 #include <esp_bt_main.h>
 #include <SPIFFS.h>
+#include "FS.h"
 
-#include "CredentialsCourtierDeMessages.h"
 #include "CredentialsWiFiManager.h"
 
 class Bouton
@@ -211,7 +211,7 @@ private:
 
     bool EvaluerPression()
     {
-        return this->pression > 1010;
+        return (this->pression / 100.0f) > 1010.0f;
     }
 
     void LireBme280()
@@ -325,10 +325,6 @@ private:
 
 public:
     PanneauDeControle(){};
-    PanneauDeControle(char **configuration)
-    {
-        this->nombreDeFenetres = atoi(configuration[4]);
-    };
 
     void Executer(bool estMeteoAcceptable)
     {
@@ -434,10 +430,11 @@ public:
         this->etats.TerminerOperation();
     }
 
-    void InitialiserFenetres()
+    void InitialiserFenetres(int p_nombreDeFenetres)
     {
-        this->fenetres = new Fenetre[atoi(nombreFenetres)];
-        for (int indiceFenetre = 0; indiceFenetre < atoi(nombreFenetres); indiceFenetre++)
+        this->nombreDeFenetres = p_nombreDeFenetres;
+        this->fenetres = new Fenetre[nombreDeFenetres];
+        for (int indiceFenetre = 0; indiceFenetre < nombreDeFenetres; indiceFenetre++)
         {
             this->fenetres[indiceFenetre] = Fenetre(indiceFenetre);
         };
@@ -449,6 +446,36 @@ class ClientCourtierDeMessages
 private:
     WiFiClient espClient;
     PubSubClient client;
+
+    // char nomFileDeMessageMqtt[60];
+    // char *nomfileTemperature;
+    // char *nomfileHumidite;
+    // char *nomfilePression;
+
+    //Tentative infructueuse d'utiliser un nom de file sur mesure. Manque de temps pour completer une version fonctionnelle.
+
+    // void ConfigurerNomsFilesDeMessages()
+    // {
+    //     char buffer[100];
+
+    //     strcpy(buffer, nomFileDeMessageMqtt);
+    //     strcat(buffer, "/Temperature");
+    //     strcpy(this->nomfileTemperature, buffer);
+    //     memset(buffer, 0, 50);
+
+    //     strcpy(buffer, nomFileDeMessageMqtt);
+    //     strcat(buffer, "/Humidite");
+    //     strcpy(this->nomfileHumidite, buffer);
+    //     memset(buffer, 0, 50);
+
+    //     strcpy(buffer, nomFileDeMessageMqtt);
+    //     strcat(buffer, "/Pression");
+    //     strcpy(this->nomfilePression, buffer);
+
+    //     Serial.println(nomfileTemperature);
+    //     Serial.println(nomfileHumidite);
+    //     Serial.println(nomfilePression);
+    // }
 
 public:
     ClientCourtierDeMessages()
@@ -464,15 +491,24 @@ public:
         client.loop();
     };
 
-    void Configurer(/* passer config*/)
+    void Configurer(char *serveurMqtt, int portMqtt, char *nomUtilisateurMqtt, char *motDePasseMqtt /* char *nomFileMqtt */)
     {
-        client.setServer(mqttServer, atoi(mqttPort));
+        client.setServer(serveurMqtt, portMqtt);
+        //strcpy(this->nomFileDeMessageMqtt, nomFileMqtt);
+        //ConfigurerNomsFilesDeMessages();à
 
-        while (!client.connected())
+        int tentatives = 0;
+        while (!client.connected() && tentatives < 5)
         {
+
             Serial.println("Connection à MQTT...");
 
-            if (client.connect("espClient", mqttUser, mqttPassword))
+            Serial.println(serveurMqtt);
+            Serial.println(portMqtt);
+            Serial.println(nomUtilisateurMqtt);
+            Serial.println(motDePasseMqtt);
+
+            if (client.connect("esp32Client", nomUtilisateurMqtt, motDePasseMqtt))
             {
                 Serial.println("Connecté");
             }
@@ -481,8 +517,14 @@ public:
                 Serial.print("La connexion a échoué avec le code: ");
                 Serial.print(client.state());
                 Serial.println("");
+
+                Serial.println(serveurMqtt);
+                Serial.println(portMqtt);
+                Serial.println(nomUtilisateurMqtt);
+                Serial.println(motDePasseMqtt);
             }
 
+            tentatives++;
             delay(2000);
         }
     };
@@ -498,8 +540,14 @@ private:
     WiFiManagerParameter custom_mqtt_Password;
     WiFiManagerParameter custom_nombre_fenetres;
     WiFiManagerParameter custom_nom_fileDeMessages;
-    static bool estConfigSauvegardee;
-    char **configuration;
+
+    char serveurMqtt[40];
+    char nomUtilisateurMqtt[25];
+    char portServeurMqtt[5];
+    char motDePasseMqtt[65];
+    char nomFileMqtt[60];
+    char nombreFenetres[2];
+    static bool estConfigurationMqttSauvegardee;
 
 public:
     GestionnaireDeWifi()
@@ -515,6 +563,7 @@ public:
     void Configurer()
     {
         AjouterParametresConfiguration();
+
         gestionnaireWifi.setConfigPortalTimeout(90);
         gestionnaireWifi.setWiFiAutoReconnect(1);
         gestionnaireWifi.setSaveConfigCallback(ModifierEstConfigSauvegardee);
@@ -523,12 +572,15 @@ public:
         {
             Serial.println("Échec de la connection");
         }
-        SauvegarderConfiguration();
+        else
+        {
+            RecupererConfiguration();
+        }
     }
 
     static void ModifierEstConfigSauvegardee()
     {
-        estConfigSauvegardee = 1;
+        estConfigurationMqttSauvegardee = 1;
     }
 
     void AjouterParametresConfiguration()
@@ -548,36 +600,36 @@ public:
             Serial.println("Échec de la connexion. Reconnexion avec l'ancienne configuration...");
             gestionnaireWifi.autoConnect();
         }
+        else
+        {
+            estConfigurationMqttSauvegardee = 0;
+        }
     }
 
     void SauvegarderConfiguration()
     {
-        DynamicJsonDocument bufferJson(2048);
-        File cfg = SPIFFS.open("/config.json", FILE_WRITE);
+        if (!estConfigurationMqttSauvegardee)
+        {
+            DynamicJsonDocument bufferJson(6000);
+            File cfg = SPIFFS.open("/config.json", "w+");
 
-        String mqttServer = custom_mqtt_server.getValue();
-        String mqttPort = custom_mqtt_Port.getValue();
-        String mqttUser = custom_mqtt_User.getValue();
-        String mqttPassword = custom_mqtt_Password.getValue();
-        String nombreFenetres = custom_nombre_fenetres.getValue();
-        String nomFileDeMessages = custom_nom_fileDeMessages.getValue();
+            bufferJson["serveurMQTT"] = custom_mqtt_server.getValue();
+            bufferJson["portMQTT"] = custom_mqtt_Port.getValue();
+            bufferJson["utilisateurMQTT"] = custom_mqtt_User.getValue();
+            bufferJson["motDePasseMQTT"] = custom_mqtt_Password.getValue();
+            bufferJson["nombreDeFenetres"] = custom_nombre_fenetres.getValue();
+            bufferJson["nomFileDeMessagesMQTT"] = custom_nom_fileDeMessages.getValue();
 
-        bufferJson["serveurMQTT"] = mqttServer;
-        bufferJson["portMQTT"] = mqttPort;
-        bufferJson["utilisateurMQTT"] = mqttUser;
-        bufferJson["motDePasseMQTT"] = mqttPassword;
-        bufferJson["nombreDeFenetres"] = nombreFenetres;
-        bufferJson["nomFileDeMessagesMQTT"] = nomFileDeMessages;
-
-        serializeJson(bufferJson, cfg);
-        cfg.close();
-        bufferJson.clear();
+            serializeJson(bufferJson, cfg);
+            cfg.close();
+            bufferJson.clear();
+        }
     }
 
     void RecupererConfiguration()
     {
-        DynamicJsonDocument bufferJson(2048);
-        File cfg = SPIFFS.open("/config.json", FILE_READ);
+        DynamicJsonDocument bufferJson(6000);
+        File cfg = SPIFFS.open("/config.json", "r+");
         auto erreur = deserializeJson(bufferJson, cfg);
 
         if (erreur)
@@ -586,23 +638,48 @@ public:
             Serial.println(erreur.f_str());
         }
 
-        const char *serveur = bufferJson["serveurMQTT"];
-        const char *port = bufferJson["portMQTT"];
-        const char *utilisateur = bufferJson["utilisateurMQTT"];
-        const char *motDePasse = bufferJson["motDePasseMQTT"];
-        const char *nombreFenetres = bufferJson["nombreDeFenetres"];
-        const char *nomFileMessage = bufferJson["nomFileDeMessagesMQTT"];
+        serializeJsonPretty(bufferJson, Serial);
+        strcpy(this->serveurMqtt, bufferJson["serveurMQTT"]);
+        strcpy(this->portServeurMqtt, bufferJson["portMQTT"]);
+        strcpy(this->nomUtilisateurMqtt, bufferJson["utilisateurMQTT"]);
+        strcpy(this->motDePasseMqtt, bufferJson["motDePasseMQTT"]);
+        strcpy(this->nomFileMqtt, bufferJson["nomFileDeMessagesMQTT"]);
+        strcpy(this->nombreFenetres, bufferJson["nombreDeFenetres"]);
+    }
 
-        memcpy(this->configuration[0], serveur, sizeof(&serveur));
-        memcpy(this->configuration[1], port, sizeof(&port));
-        memcpy(this->configuration[2], utilisateur, sizeof(&utilisateur));
-        memcpy(this->configuration[3], motDePasse, sizeof(&motDePasse));
-        memcpy(this->configuration[4], nombreFenetres, sizeof(&nombreFenetres));
-        memcpy(this->configuration[5], nomFileMessage, sizeof(&nomFileMessage));
+    //Je ne veux même pas en parler...
+    char *getServeurMqtt()
+    {
+        return this->serveurMqtt;
+    }
+
+    int getPortMqtt()
+    {
+        return atoi(this->portServeurMqtt);
+    }
+
+    char *getNomUtilisateurMqtt()
+    {
+        return this->nomUtilisateurMqtt;
+    }
+
+    char *getMotDePasseMqtt()
+    {
+        return this->motDePasseMqtt;
+    }
+
+    char *getNomFileMqtt()
+    {
+        return this->nomFileMqtt;
+    }
+
+    int getNombreFenetres()
+    {
+        return atoi(this->nombreFenetres);
     }
 };
 
-bool GestionnaireDeWifi::estConfigSauvegardee = false;
+bool GestionnaireDeWifi::estConfigurationMqttSauvegardee = 0;
 
 class StationMeteo
 {
@@ -615,7 +692,7 @@ private:
     char **configuration;
     bool estConfiguree = 0;
     unsigned long delaisPrecedentStation = 0;
-    const unsigned long delaisExecution = 3000;
+    const unsigned long delaisPublication = 5000;
 
 public:
     StationMeteo(){};
@@ -629,39 +706,60 @@ public:
 
         if (panneauControle.getEstPortailDemande())
         {
-            gestionnaireConnexion.ActiverPortail();
-            gestionnaireConnexion.SauvegarderConfiguration();
-            clientCourtier.Configurer();
+            ActiverPortail();
         }
 
         evaluateurMeteo.Executer();
         panneauControle.Executer(evaluateurMeteo.getEstMeteoAcceptable());
 
-        if ((millis() - delaisPrecedentStation) > delaisExecution)
+        if ((millis() - delaisPrecedentStation) > delaisPublication)
         {
-            //Devaient initialement être reçues via un Array mais cela faisait paniquer
-            //le processeur donc nous avons opté pour 3 accesseurs.
-
-            float temperature = evaluateurMeteo.getTemperature();
-            float humidite = evaluateurMeteo.getHumidite();
-            float pression = evaluateurMeteo.getPression();
-
-            clientCourtier.PublierDonnees(
-                String(temperature),
-                String(humidite),
-                String(pression / 100.0f));
-
-            this->delaisPrecedentStation = millis();
+            PublierDonnees();
         }
     }
 
     void Configurer()
     {
-        panneauControle.InitialiserFenetres();
         evaluateurMeteo.ConfigurerCapteur();
         gestionnaireConnexion.Configurer();
-        clientCourtier.Configurer();
+
+        clientCourtier.Configurer(
+            gestionnaireConnexion.getServeurMqtt(),
+            gestionnaireConnexion.getPortMqtt(),
+            gestionnaireConnexion.getNomUtilisateurMqtt(),
+            gestionnaireConnexion.getMotDePasseMqtt());
+        //gestionnaireConnexion.getNomFileMqtt());
+
+        panneauControle.InitialiserFenetres(gestionnaireConnexion.getNombreFenetres());
+
         this->estConfiguree = 1;
+    }
+
+    void ActiverPortail()
+    {
+        gestionnaireConnexion.ActiverPortail();
+        gestionnaireConnexion.SauvegarderConfiguration();
+        gestionnaireConnexion.RecupererConfiguration();
+        clientCourtier.Configurer(
+            gestionnaireConnexion.getServeurMqtt(),
+            gestionnaireConnexion.getPortMqtt(),
+            gestionnaireConnexion.getNomUtilisateurMqtt(),
+            gestionnaireConnexion.getMotDePasseMqtt());
+        //gestionnaireConnexion.getNomFileMqtt());
+    }
+
+    void PublierDonnees()
+    {
+        float temperature = evaluateurMeteo.getTemperature();
+        float humidite = evaluateurMeteo.getHumidite();
+        float pression = evaluateurMeteo.getPression();
+
+        clientCourtier.PublierDonnees(
+            String(temperature),
+            String(humidite),
+            String(pression / 100.0f));
+
+        this->delaisPrecedentStation = millis();
     }
 };
 
@@ -671,10 +769,7 @@ void setup()
 {
     Serial.begin(115200);
     esp_bluedroid_disable();
-    if (!SPIFFS.begin())
-    {
-        Serial.println("Echec au demarrage de SPIFFS");
-    };
+    SPIFFS.begin(true);
 }
 
 void loop()
