@@ -689,9 +689,8 @@ private:
     GestionnaireDeWifi gestionnaireConnexion;
     ClientCourtierDeMessages clientCourtier;
 
-    char **configuration;
     bool estConfiguree = 0;
-    unsigned long delaisPrecedentStation = 0;
+    unsigned long delaisPrecedentPublication = 0;
     const unsigned long delaisPublication = 5000;
 
 public:
@@ -712,7 +711,7 @@ public:
         evaluateurMeteo.Executer();
         panneauControle.Executer(evaluateurMeteo.getEstMeteoAcceptable());
 
-        if ((millis() - delaisPrecedentStation) > delaisPublication)
+        if ((millis() - delaisPrecedentPublication) > delaisPublication)
         {
             PublierDonnees();
         }
@@ -754,12 +753,13 @@ public:
         float humidite = evaluateurMeteo.getHumidite();
         float pression = evaluateurMeteo.getPression();
 
+        Serial.println("Publication des données");
         clientCourtier.PublierDonnees(
             String(temperature),
             String(humidite),
             String(pression / 100.0f));
 
-        this->delaisPrecedentStation = millis();
+        this->delaisPrecedentPublication = millis();
     }
 };
 
